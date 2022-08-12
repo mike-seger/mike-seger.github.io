@@ -836,7 +836,7 @@
 	}
 
 	function isStatic() {
-		return location.port==8000 || location.includes(".github.io");
+		return location.port==8000 || location.host.includes(".github.io");
 	}
 
 	async function loadConfiguration() {
