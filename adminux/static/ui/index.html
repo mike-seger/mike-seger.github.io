@@ -106,7 +106,7 @@
 	let hiddenUploadInput = null;
 
 	let downloadFormat = "TSV";
-	let remoteBaseUri = location.port==8000? "../../db/changelog/data/" : "../api/v1/admin/csv";
+	let remoteBaseUri = isStatic()? "../../db/changelog/data/" : "../api/v1/admin/csv";
 
 	function stringWidth(text) {
 		const font = "16px sans-serif"	
@@ -835,8 +835,12 @@
 		});
 	}
 
+	function isStatic() {
+		return location.port==8000 || location.includes(".github.io");
+	}
+
 	async function loadConfiguration() {
-		const configUrl = location.port==8000? remoteBaseUri+'config.json' : remoteBaseUri+'/configuration'
+		const configUrl = isStatic()? remoteBaseUri+'config.json' : remoteBaseUri+'/configuration'
 		const response = await fetch(configUrl);
 		const configuration = await response.json();
 		console.log(configuration);
