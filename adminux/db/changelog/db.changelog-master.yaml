@@ -1,0 +1,8 @@
+databaseChangeLog:
+  - logicalFilePath: db.changelog-master.yaml
+  - changeSet:
+      id: 1
+      author: csvloader
+  - includeAll:
+      relativeToChangelogFile: true
+      path: changes

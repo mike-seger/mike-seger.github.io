@@ -1,0 +1,356 @@
+{
+  "entities": {
+    "com.net128.app.jpa.adminux.data.Car": {
+      "attributes": [
+        {
+          "columnName": "id",
+          "enumConstants": null,
+          "hidden": true,
+          "id": true,
+          "name": "id",
+          "readOnly": false,
+          "title": "id",
+          "type": "Int"
+        },
+        {
+          "columnName": "brand",
+          "enumConstants": null,
+          "hidden": false,
+          "id": false,
+          "name": "brand",
+          "readOnly": false,
+          "title": "brand",
+          "type": "String"
+        },
+        {
+          "columnName": "total_price",
+          "enumConstants": null,
+          "hidden": false,
+          "id": false,
+          "name": "totalPrice",
+          "readOnly": false,
+          "title": "totalPrice",
+          "type": "Float"
+        }
+      ],
+      "deleteUri": "?entity=CAR&",
+      "getUri": "/CAR.csv",
+      "id": "com.net128.app.jpa.adminux.data.Car",
+      "idField": "id",
+      "name": "CAR",
+      "putUri": "?entity=CAR",
+      "sortable": false
+    },
+    "com.net128.app.jpa.adminux.data.City": {
+      "attributes": [
+        {
+          "columnName": "id",
+          "enumConstants": null,
+          "hidden": true,
+          "id": true,
+          "name": "id",
+          "readOnly": false,
+          "title": "id",
+          "type": "Int"
+        },
+        {
+          "columnName": "country",
+          "enumConstants": null,
+          "hidden": false,
+          "id": false,
+          "name": "country",
+          "readOnly": false,
+          "title": "country",
+          "type": "String"
+        },
+        {
+          "columnName": "geo_id",
+          "enumConstants": null,
+          "hidden": false,
+          "id": false,
+          "name": "geoId",
+          "readOnly": false,
+          "title": "geoId",
+          "type": "Int"
+        },
+        {
+          "columnName": "iso_country",
+          "enumConstants": null,
+          "hidden": false,
+          "id": false,
+          "name": "isoCountry",
+          "readOnly": false,
+          "title": "isoCountry",
+          "type": "String"
+        },
+        {
+          "columnName": "latitude",
+          "enumConstants": null,
+          "hidden": false,
+          "id": false,
+          "name": "latitude",
+          "readOnly": false,
+          "title": "latitude",
+          "type": "Float"
+        },
+        {
+          "columnName": "longitude",
+          "enumConstants": null,
+          "hidden": false,
+          "id": false,
+          "name": "longitude",
+          "readOnly": false,
+          "title": "longitude",
+          "type": "Float"
+        },
+        {
+          "columnName": "modified",
+          "enumConstants": null,
+          "hidden": false,
+          "id": false,
+          "name": "modified",
+          "readOnly": false,
+          "title": "modified",
+          "type": "Date"
+        },
+        {
+          "columnName": "name",
+          "enumConstants": null,
+          "hidden": false,
+          "id": false,
+          "name": "name",
+          "readOnly": false,
+          "title": "name",
+          "type": "String"
+        },
+        {
+          "columnName": "population",
+          "enumConstants": null,
+          "hidden": false,
+          "id": false,
+          "name": "population",
+          "readOnly": false,
+          "title": " population",
+          "type": "Int"
+        }
+      ],
+      "deleteUri": "?entity=CITY&",
+      "getUri": "/CITY.csv",
+      "id": "com.net128.app.jpa.adminux.data.City",
+      "idField": "id",
+      "name": "CITY",
+      "putUri": "?entity=CITY",
+      "sortable": true
+    },
+    "com.net128.app.jpa.adminux.data.CountryPopulation": {
+      "attributes": [
+        {
+          "columnName": "id",
+          "enumConstants": null,
+          "hidden": true,
+          "id": true,
+          "name": "id",
+          "readOnly": false,
+          "title": "id",
+          "type": "Int"
+        },
+        {
+          "columnName": "area_sq_km",
+          "enumConstants": null,
+          "hidden": false,
+          "id": false,
+          "name": "areaSqKm",
+          "readOnly": false,
+          "title": "area ㎢",
+          "type": "Int"
+        },
+        {
+          "columnName": "country",
+          "enumConstants": null,
+          "hidden": false,
+          "id": false,
+          "name": "country",
+          "readOnly": false,
+          "title": "country",
+          "type": "String"
+        },
+        {
+          "columnName": "fert_rate",
+          "enumConstants": null,
+          "hidden": false,
+          "id": false,
+          "name": "fertRate",
+          "readOnly": false,
+          "title": "fertRate",
+          "type": "Float"
+        },
+        {
+          "columnName": "med_age",
+          "enumConstants": null,
+          "hidden": false,
+          "id": false,
+          "name": "medAge",
+          "readOnly": false,
+          "title": "age x̄",
+          "type": "Int"
+        },
+        {
+          "columnName": "migrants",
+          "enumConstants": null,
+          "hidden": false,
+          "id": false,
+          "name": "migrants",
+          "readOnly": false,
+          "title": "migrants",
+          "type": "Int"
+        },
+        {
+          "columnName": "net_change",
+          "enumConstants": null,
+          "hidden": false,
+          "id": false,
+          "name": "netChange",
+          "readOnly": false,
+          "title": "net Δ",
+          "type": "Int"
+        },
+        {
+          "columnName": "pop_per_sq_km",
+          "enumConstants": null,
+          "hidden": false,
+          "id": false,
+          "name": "popPerSqKm",
+          "readOnly": false,
+          "title": "pop. / ㎢",
+          "type": "Int"
+        },
+        {
+          "columnName": "pop_urban_perc",
+          "enumConstants": null,
+          "hidden": false,
+          "id": false,
+          "name": "popUrbanPerc",
+          "readOnly": false,
+          "title": "pop.urban %",
+          "type": "Float"
+        },
+        {
+          "columnName": "population",
+          "enumConstants": null,
+          "hidden": false,
+          "id": false,
+          "name": "population",
+          "readOnly": false,
+          "title": " population",
+          "type": "Int"
+        },
+        {
+          "columnName": "world_perc",
+          "enumConstants": null,
+          "hidden": false,
+          "id": false,
+          "name": "worldPerc",
+          "readOnly": false,
+          "title": "world %",
+          "type": "Float"
+        },
+        {
+          "columnName": "year_change_perc",
+          "enumConstants": null,
+          "hidden": false,
+          "id": false,
+          "name": "yearChangePerc",
+          "readOnly": false,
+          "title": "year Δ%",
+          "type": "Float"
+        }
+      ],
+      "deleteUri": "?entity=COUNTRY_POPULATION&",
+      "getUri": "/COUNTRY_POPULATION.csv",
+      "id": "com.net128.app.jpa.adminux.data.CountryPopulation",
+      "idField": "id",
+      "name": "COUNTRY_POPULATION",
+      "putUri": "?entity=COUNTRY_POPULATION",
+      "sortable": true
+    },
+    "com.net128.app.jpa.adminux.data.Person": {
+      "attributes": [
+        {
+          "columnName": "my_id",
+          "enumConstants": null,
+          "hidden": true,
+          "id": true,
+          "name": "myId",
+          "readOnly": false,
+          "title": "myId",
+          "type": "Int"
+        },
+        {
+          "columnName": "address",
+          "enumConstants": null,
+          "hidden": false,
+          "id": false,
+          "name": "address",
+          "readOnly": false,
+          "title": "address",
+          "type": "String"
+        },
+        {
+          "columnName": "city",
+          "enumConstants": null,
+          "hidden": false,
+          "id": false,
+          "name": "city",
+          "readOnly": false,
+          "title": "city",
+          "type": "String"
+        },
+        {
+          "columnName": "country",
+          "enumConstants": [
+            "Austria",
+            "Belgium",
+            "Luxembourg",
+            "Liechtenstein",
+            "Switzerland",
+            "Germany",
+            "Other"
+          ],
+          "hidden": false,
+          "id": false,
+          "name": "country",
+          "readOnly": false,
+          "title": "country",
+          "type": "Enum"
+        },
+        {
+          "columnName": "first_name",
+          "enumConstants": null,
+          "hidden": false,
+          "id": false,
+          "name": "firstName",
+          "readOnly": false,
+          "title": "firstName",
+          "type": "String"
+        },
+        {
+          "columnName": "last_name",
+          "enumConstants": null,
+          "hidden": false,
+          "id": false,
+          "name": "lastName",
+          "readOnly": false,
+          "title": "lastName",
+          "type": "String"
+        }
+      ],
+      "deleteUri": "?entity=PERSON&",
+      "getUri": "/PERSON.csv",
+      "id": "com.net128.app.jpa.adminux.data.Person",
+      "idField": "myId",
+      "name": "PERSON",
+      "putUri": "?entity=PERSON",
+      "sortable": false
+    }
+  }
+}

@@ -1,0 +1,24 @@
+databaseChangeLog:
+  - logicalFilePath: 20220803-210000.yaml
+  - changeSet:
+      id: load data
+      author: adminux
+      changes:
+        - loadData:
+            relativeToChangelogFile: true
+            file: ../data/CAR.csv
+            separator: ','
+            quotchar: '"'
+            tableName: CAR
+        - loadData:
+            relativeToChangelogFile: true
+            file: ../data/CITY.csv
+            separator: ','
+            quotchar: '"'
+            tableName: CITY
+        - loadData:
+            relativeToChangelogFile: true
+            file: ../data/COUNTRY_POPULATION.csv
+            separator: ','
+            quotchar: '"'
+            tableName: COUNTRY_POPULATION

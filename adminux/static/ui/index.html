@@ -1,0 +1,906 @@
+<html lang="en">
+<head>
+	<title>db adminux</title>
+
+<!--
+	<script src="https://jsuites.net/v4/jsuites.js"></script>
+	<script src="https://jsuites.net/v4/jsuites.webcomponents.js"></script>
+	<script src="https://bossanova.uk/jspreadsheet/v4/jexcel.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/d3-dsv@3"></script>
+
+	<link rel="stylesheet" href="https://jsuites.net/v4/jsuites.css" type="text/css" />
+	<link rel="stylesheet" href="https://bossanova.uk/jspreadsheet/v4/jexcel.css" type="text/css" />
+	<link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+-->	
+	<script src="local/lib/jsuites.js"></script>
+	<script src="local/lib/jsuites.webcomponents.js"></script>
+	<script src="local/lib/jexcel.js"></script>
+	<script src="local/lib/d3-dsv@3.js"></script>
+
+	<link rel="stylesheet" href="local/lib/jsuites.css" type="text/css" />
+	<link rel="stylesheet" href="local/lib/jexcel.css" type="text/css" />
+	<link rel="stylesheet" href="local/lib/Material-Icons.css" />
+
+	<link rel="stylesheet" href="jexcel-custom.css" type="text/css" charset="utf-8" />
+	<link rel="stylesheet" href="jtoolbar-custom.css" type="text/css" charset="utf-8" />
+	
+	<style>
+		body, html {
+			overflow: hidden;
+			padding: 0;
+			margin: 0;
+			border: 0;
+		}
+
+		html {
+			font-family: sans-serif;
+		}
+
+		body {
+			overflow-x: auto;
+			width: 100%;
+		}
+
+		body::-webkit-scrollbar {
+			min-width: 10px;
+			min-height: 10px;
+			color: #ccc;
+			background-color: #ccc;
+		}
+
+		body::-webkit-scrollbar-thumb {
+			min-width: 10px;
+			min-height: 10px;
+			background-color: #aaa;
+		}
+
+		body::-webkit-scrollbar-button { width: 0; }
+		body::-webkit-scrollbar-corner { width: 0; }
+
+		.container {
+			height: calc(100vh - 30px);
+			flex-direction: column;
+			padding: 9px;
+		}
+
+		.content {
+			flex: 1;
+			box-sizing: border-box;
+		}
+
+		#toolbar {
+			width: auto;
+		}
+	</style>
+</head>
+<body>
+	<div class="container">
+		<div id="toolbar"></div> 
+		<div class="content" id="spreadsheet1"></div>
+	</div>
+
+	<jsuites-modal title="Saving Data" closed="true" width="600" height="400">
+		<div id="servertext"></div>
+	</jsuites-modal>
+
+	<input type="file" id="selectedFile" style="display: none;" />
+
+	<script>
+	const spreadsheet1 = document.getElementById('spreadsheet1')
+	const serverMessage = document.querySelector('jsuites-modal')
+	const toolBar = document.getElementById('toolbar');
+	const serverText = 	document.getElementById('servertext')
+
+	const hMargin = 5;
+	const dropdownMargin = 11;
+	const calendarMargin = 30;
+	const columnFilterTool = 4;
+	const tableSearchTool = 5;
+
+	let entityIds = [];
+	let entities = {};
+	let currentEntity = null;
+	let originalValiueHashes = {};
+	let hiddenA = null;
+	let hiddenUploadButton = null;
+	let hiddenUploadInput = null;
+
+	let downloadFormat = "TSV";
+	let remoteBaseUri = location.port==8000? "../../db/changelog/data/" : "../api/v1/admin/csv";
+
+	function stringWidth(text) {
+		const font = "16px sans-serif"	
+		const canvas = document.createElement("canvas");	
+		const context = canvas.getContext("2d");	
+		context.font = font;	
+		const { width } = context.measureText(text);	
+		return width;
+	}
+
+	const mWidth = stringWidth("M");
+
+	function entityNames(entities) {
+		return Object.keys((Object.fromEntries(Object.entries(entities).map(([k, entity]) => [entity.name]))))
+	}
+
+	function maxStringWidth(texts) {
+		const max = texts.reduce((element,max) => 
+			stringWidth(element) > stringWidth(max) ? element : max, 0)
+		return stringWidth(max);
+	}
+
+	function autoResizeColumn(js, colIndex, header, entity) {
+		function findLongestString(arr) {
+			return arr.reduce((a, b)=> a.length > b.length ? a : b);
+		}
+
+		const colConfig = entity.attributes[colIndex];
+		//console.log(colConfig);
+
+		const longestString = findLongestString(js.getColumnData(colIndex));
+		const sortableMargin = entity.sortable === true?dropdownMargin:0;
+		let w = Math.max(stringWidth(longestString), stringWidth(header)+sortableMargin)+2*mWidth;
+		if(colConfig.type === 'Enum') w += dropdownMargin;
+		else if(colConfig.type.indexOf('Date')>=0) w += calendarMargin;
+		js.setWidth(colIndex, w + 2*hMargin);
+	}
+
+	function autoResizeColumns(js, entity) {
+		const headers = js.getHeaders().split(',');
+		const data = js.getData();
+		if(js.getData().length==0) return;
+		for(let col = 0; col<headers.length; col++) 
+			autoResizeColumn(js, col, headers[col], entity)
+	}
+
+	function setColumnParams(js, col, header) {
+		console.log(`col: ${col} - ${header}`);
+	}
+
+	function setAllColumnParams(js, entity) {
+		const headers = js.getHeaders().split(',');
+		for(let col = 0; col<headers.length; col++) 
+			setColumnParams(js, col, headers[col])
+	}
+
+	function cellChanged(instance, cell, col, row, value) {
+		return true;
+	}
+
+	function hashCode(s){
+  		return s.split("").reduce(function(a,b){a=((a<<5)-a)+b.charCodeAt(0);return a&a},0);              
+	}
+
+	function isRowModified(js, entity, row, rowIndex) {
+		const s = row.join('');
+		if(s.length==0) return false;
+		const hc = hashCode(s);
+		const allHc = js.getMeta();
+		const originalHc = js.getMeta('A'+rowIndex)?js.getMeta('A'+rowIndex).hc:null
+		return hc !== originalHc;
+	}
+
+	function getIdFieldIndex(entity) {
+		return entity.attributes.findIndex(e => { return e.name === entity.idField; });
+	}
+
+	function cacheOriginalValueHashes(js, entity) {
+		if(! entity.idField) return;
+		const idIndex = getIdFieldIndex(entity);
+		if(idIndex<0) return;
+		const data = getCurrentData(js, entity);
+		originalValiueHashes[entity.name] = {};
+		for(let i=1; i<data.length;i++) {
+			const row = data[i];
+			const id = row[idIndex];
+			const hc = hashCode(row.join(''));
+			originalValiueHashes[entity.name][id] = hc;
+			js.setMeta('A'+i, 'hc', hc);
+		}
+	}
+
+	function clearData(js, entity, reset) {
+		if(reset) {
+			var newData = [];
+			newData.push(Array(entity.attributes.length).fill(''));
+			js.setData(newData);
+		} else {
+			const n = js.getData().length;
+			js.insertRow(1,0,true);
+			if(n>0) js.deleteRow(1, n);
+		}
+	}
+
+	function beforeDeleteRow(instance, entity) {
+    	console.log("beforeDeleteRow");
+		const js = instance.jexcel;
+		const n = js.getSelectedRows(false).length;
+		if(js.getData().length <= n) {
+			clearData(js, entity, false);
+			return false;
+		}
+		return true;
+	}
+	
+	function customDeleteRow(instance, entity, ...all) {
+		if(!beforeDeleteRow(instance, entity)) {
+			return false;
+		}
+		return instance.jexcel.originalDeleteRow(...all);
+	}
+
+	function setElementOffsetWidth(el, w, offsetW, hackerMode) {
+		if(!el) {
+			console.log('No el');
+			return;
+		}
+		let newWidth = w+"px";
+		el.style.width = '450px'
+		const diff = el.offsetWidth - 450;
+		const newW = Math.max(w - diff, 600) + offsetW;
+		newWidth = newW+"px";
+		el.style.width = newWidth;
+		//console.log("OW: "+el.classList+"\n"+w+" - "+newWidth+" - "+el.offsetWidth);
+	}
+
+	function resizeBars(js) {
+		if(!js) js = getCurrentJexcel();
+		const w = js.el.querySelector(".jexcel_content").offsetWidth;
+		setElementOffsetWidth(document.getElementById("toolbar"), w, -1, true);
+		//FIXME find a better solution than this hacky magic offset calculation
+		setElementOffsetWidth(js.el, w, 4.3-(w-200)/500, true);
+	}
+
+	function adjustMaxContentHeight(js, withSearch) {
+		if(!js) js = getCurrentJexcel();
+		const content = js.el.querySelector(".jexcel_content");
+		content.removeAttribute("style");
+		content.classList.remove("jexcel_content_with_search_filter");
+		if(withSearch) {
+			content.classList.add("jexcel_content_with_search_filter");
+		}
+	}
+
+	function loaded(instance, entity) {
+		console.log('New data is loaded');
+		const js = instance.jexcel;
+		if(js.getData().length==0) {
+			clearData(js, entity, /*!originalValiueHashes[entity.name]*/true);
+			//const data = js.getData();
+			//console.log(data);
+		}
+
+		if(!js.originalDeleteRow) {
+			js.originalDeleteRow = js.deleteRow;
+			js.deleteRow = function (...all) { customDeleteRow(instance, entity, ...all) };
+		}
+
+		//TODO set meta information with hashCode on A1, A2, A3 ...
+		//serves for later comparison when determinig "dirty" instead of originalValiueHashes
+		//make it independant from identifiable
+		//meta information should only be set as a result from a server data refresh
+		//entity.idField and getIdFieldIndex
+
+		autoResizeColumns(js, entity);
+		//console.log(entity);
+		setAllColumnParams(js, entity);
+		initAllFilterStates(js);
+		syncAllIconStates(js);
+		cacheOriginalValueHashes(js, entity);
+		resizeBars(js);
+		adjustMaxContentHeight(js, false);
+	}
+
+	function directionSort(direction) {
+		const js = getCurrentJexcel();
+		const col = js.selectedCoord?js.selectedCoord.col:0;
+		const type = js.getConfig().columns[col].type;
+
+		return function(a, b) {
+
+			let valueA = a[1];
+			let valueB = b[1];
+
+			if(type === 'numeric') {
+				valueA = new Number(a[1]);
+				valueB = new Number(b[1]);
+			}
+
+			if (! direction) {
+				return (valueA === '' && valueB !== '') ? 1 : (valueA !== '' && valueB === '') ? -1 : (valueA > valueB) ? 1 : (valueA < valueB) ? -1 :  0;
+			} else {
+				return (valueA === '' && valueB !== '') ? 1 : (valueA !== '' && valueB === '') ? -1 : (valueA > valueB) ? -1 : (valueA < valueB) ? 1 :  0;
+			}
+		}
+	}
+
+	function createColumns(attributes) {
+		let columns = []
+		for (const properties of attributes) {
+			let column = {}
+			const title = properties.title;
+			const name = properties.columnName;
+			console.log(properties);
+			if(properties.hidden) column = {
+				type: 'hidden', title: title, name: name };
+			else if(properties.type === "Float") column = {
+				type: 'numeric', align: 'right', title: title, 
+				name: name, sorting: directionSort};
+			else if(properties.type === "Int") column = {
+				type: 'numeric', align: 'right', title: title, 
+				name: name, sorting: directionSort};
+			else if(properties.type === "Enum") column = {
+				type: 'dropdown', title: title, name: name,
+				source: properties.enumConstants};
+			else column = {
+				type: 'text', title: title, name: name };
+			columns.push(column);
+		}
+		return columns;
+	}
+
+	function tableChanged(instance, entity) {
+		console.log("tableChanged");
+		const js = instance.jexcel;
+		autoResizeColumns(js, entity);
+		resizeBars(js);
+	}
+
+	function columnResized(instance) {
+		console.log("columnResized");
+		resizeBars(instance.jexcel);
+	}
+
+	function selected(instance, col, row) {
+		if(row!=0) return false;
+		//console.log(`selected: ${col} / ${row}`);
+		instance.jexcel.selectedCoord = { col: col, row: row };
+		return false;
+	}
+
+	function remoteUrl(url, tabSeparated, deleteAll) {
+		return url+(url.includes('?')?"&":"?")+"tabSeparated="+(tabSeparated === true)
+			+ "&deleteAll="+(deleteAll === true)
+	}
+
+	function switchToEntity(entity) {
+		currentEntity = entity;
+		let pos = entityIds.indexOf(entity.id);
+		if(pos>=0) {
+			selectWorkSheet(pos);
+			return;
+		}
+		entityIds.push(entity.id);
+		entities[entity.id] = entity;
+
+		let columns = []
+		if(entity.attributes) {
+			columns = createColumns(entity.attributes);
+			console.log(columns);
+		}
+		getData(entity).then((csv) => {
+			data = d3.csvParse(csv);
+			jspreadsheet.tabs(spreadsheet1, [{
+				sheetName: entity.name,
+				data: data,
+				//csv: remoteBaseUri+entity.getUri,
+				columns: columns,
+				//csvHeaders:true,
+				defaultColAlign: 'left',
+				tableOverflow:true,
+				//tableHeight:'calc(100vh - 80px)',
+				onload: function(instance) { loaded(instance, entity); },
+				onchange: cellChanged,
+				onselection: selected,
+				onafterchanges: function(instance) { tableChanged(instance, entity); },
+				oninsertcolumn: function(instance) { tableChanged(instance, entity); },
+				ondeletecolumn: function(instance) { tableChanged(instance, entity); },
+				onresizecolumn: columnResized,
+				//onbeforedeleterow: customDeleteRow,
+				allowInsertColumn: false,
+				allowDeleteColumn: false,
+				allowRenameColumn: false,
+				allowManualInsertColumn: false,
+				allowExport: false,
+				rowResize: false,
+				fillscreen: false,
+				search: true,
+				columnSorting: entity.sortable,
+				filters: true,
+				//toolbar: true,
+				sorting: directionSort,
+				//lazyLoading:true,
+				//loadingSpin:true,
+			}])});
+	}
+
+	function resetMessage() {
+		serverText.innerText = "";
+	}
+
+	function successDialog(message) {
+		serverText.innerText += message+"\n";
+		serverMessage.modal.open();
+	}
+
+	function errorDialog(content) {
+		resetMessage();
+		if(content.trim().startsWith('<'))  {
+			content = content.replace(/<[^>]+>/g, '')
+				.replace(/^\s*$(?:\r\n?|\n)/gm,'');
+
+			const newLineExpression = /\r\n|\n\r|\n|\r/g;
+			const removeDuplicatedLines = (text) => {
+				return text.split(newLineExpression)
+					.filter((item, index, array) => array.indexOf(item) === index)
+					.join('\n');
+			};
+			content = removeDuplicatedLines(content);
+		}
+		serverText.innerText = content;
+		serverMessage.modal.open();
+	}
+
+	async function getData(theEntity) {
+		const entity = theEntity?theEntity:currentEntity;
+		const uri = remoteBaseUri+entity.getUri;
+		try {
+			const response = await fetch(uri, { method: "GET" });
+			const data = await response.text();
+			return data;
+		} catch (e) {
+            console.log('error', e);
+            return null
+        }
+	}
+
+	async function refreshData() {
+		const data = await getData();
+		if(data!=null) {
+			const gridData = await d3.csvParse(data);
+			const js = getCurrentJexcel();
+			js.setData(gridData);
+			js.orderBy(0, 0);
+		}
+	}
+
+	async function submitData(uri, method, body) {
+		serverText.innerText = "Uploading...";
+		serverMessage.modal.open();
+		try {
+			const response = await fetch(uri, {
+				method: method,
+				body: body});
+			resetMessage();
+			const success = await handleFetchTextResponse(response);
+			if(success) await refreshData();
+		} catch(e) {
+			errorDialog(e.message);
+		}
+	}
+
+	function uploadFile(file) {
+		const entity = currentEntity;
+		let uri = null;
+		let method = "PUT";
+		let tabSeparated = true;
+		console.log(file.name+" ("+file.type+"):");
+		if(file.type === "text/tab-separated-values") {
+			uri = remoteBaseUri + entity.putUri;
+		} else if(file.type === "text/csv") {
+			uri = remoteBaseUri + entity.putUri;
+			tabSeparated = false;
+		} else {
+			console.log("Unsupported file type: "+file.type)
+		}
+
+		if(uri!=null) {
+			submitData(remoteUrl(uri, tabSeparated, true), method, file);
+		}
+	}
+	
+	// function upload() {
+	// 	console.log("Upload");
+	// 	const inputFile = document.getElementById('selectedFile');
+	// 	const onSelectFile = () => uploadFile(inputFile.files[0]);
+	// 	inputFile.addEventListener('change', onSelectFile, false);
+	// 	inputFile.click();
+	// }
+
+	function downloadSvFile(fileName, data) {
+		let result;
+		let mimetype = "text/csv";
+		const timeStamp =new Date().toISOString().substring(0,19).replaceAll(/[:.-]/g, '_').replace('T', '-');
+		if(downloadFormat == "TSV") {
+			result = d3.tsvFormatBody(data);
+			mimetype = "text/tab-separated-values";
+		} else result = d3.csvFormatBody(data);
+		if(hiddenA) hiddenA.remove();
+		hiddenA = document.createElement('a');
+		hiddenA.href = 'data:'+mimetype+';charset=utf-8,' + encodeURI(result);
+		hiddenA.target = '_blank';
+		hiddenA.download = fileName+'-'+ timeStamp +'.'+downloadFormat.toLowerCase();
+		hiddenA.click();
+	}
+
+	function getWorkSheetTabs() {
+		return spreadsheet1.querySelectorAll('.jexcel_tab_link');
+	}
+
+	function getCurrentWorkSheetIndex() {
+		return spreadsheet1.children[0].querySelector('.selected')
+			.getAttribute('data-spreadsheet');
+	}
+
+	function selectWorkSheet(num) {
+		const tabs = getWorkSheetTabs()
+		if(!tabs || tabs.length<num) return;
+		tabs[num].click();
+		const js = getJexcel(num);
+		syncAllIconStates(js);
+		resizeBars(js);
+	}
+
+	function getJexcelDisplayInfo(js) {
+		const content = js.el.querySelector('.jexcel_content');
+		const thead = js.el.querySelector('thead.resizable');
+		const tbody = js.el.querySelector('tbody.draggable');
+		let tr = tbody.querySelector("tr:nth-child(2)");
+		let trFirst = tbody.querySelector("tr:first-child");
+		if(! tr) tr = trFirst;
+		const tBodyH = tbody.offsetHeight;
+		const trH = tr.offsetHeight;
+		let x = 1;
+		let y = 0;
+		if(js.highlighted && js.highlighted.length>0) {
+			x = Number(js.highlighted[0].getAttribute('data-x'));
+			y = Number(js.highlighted[0].getAttribute('data-y'));
+		} else {
+			x = 1;
+			y = Math.round(content.scrollTop*1.0/trH+0.5);
+		}
+		return { content: content, selectedX: x, selectedY: y, bodyH: tbody.offsetHeight, bodyTop: tbody.offsetTop, 
+			headH: thead.offsetHeight, trH: trH, scrollH: content.offsetHeight, 
+			scroll: content.scrollTop };
+	}
+
+	function pageUpDown(js, up) {
+		const displayInfo = getJexcelDisplayInfo(js);
+		with(displayInfo) {
+			const scrollMax = bodyH + headH +trH - scrollH;
+			const rowDelta = Math.trunc(scrollH/trH)-1;
+			const pageDelta = rowDelta*trH;
+			let newScroll = 0;
+			let newSelectedRow = 0;
+			if(up && scroll > pageDelta) {
+				newScroll = scroll - pageDelta;
+				newSelectedRow = selectedY - rowDelta;
+			} else if(!up) {
+				if(scroll < scrollMax) {
+					newScroll = scroll + pageDelta;
+					newSelectedRow = selectedY + rowDelta;
+				}
+				else newScroll = scrollMax;
+			}
+			content.scrollTop = newScroll;
+			js.updateSelectionFromCoords(selectedX, newSelectedRow, selectedX, newSelectedRow);
+			console.log("newScroll: "+newScroll + " x/y=" + selectedX +"/"+newSelectedRow);
+		}
+	}
+
+	function getJexcel(num) {
+		if(!spreadsheet1.children[0]) return undefined;
+		let js = spreadsheet1.jexcel[num];
+		if(js && !js.oldOrderBy && js.orderBy) {
+			js.oldOrderBy  = js.orderBy;
+		}
+		return js;
+	}
+
+	function getCurrentJexcel() {
+		if(!spreadsheet1.children[0]) return undefined;
+		return getJexcel(getCurrentWorkSheetIndex());
+	}
+
+	function getCurrentColumnsNames(entity) {
+		return entity.attributes.map(a => a.columnName);
+	}
+
+	function getCurrentData(js, theEntity) {
+		if(!js) js = getCurrentJexcel();
+		if(!js) return [];
+		const entity = theEntity?theEntity:currentEntity;
+		let data = js.getData();
+		data.splice(0, 0, getCurrentColumnsNames(entity));
+		return data;
+	}
+
+	function download() {
+		const data = getCurrentData(getCurrentJexcel());
+		//console.log(data);
+		if(data.length==0) return;
+		downloadSvFile(currentEntity.name, data);
+	}
+
+	async function saveData(uri, data) {
+		if(data.length<=1) {
+			return true;
+		}
+		try {
+			const response = await fetch(uri, {
+				method: 'PUT',
+				headers: { 'Content-type': 'text/csv' },
+				body: d3.csvFormatBody(data),
+			});
+			return await handleFetchTextResponse(response);
+		} catch(e) {
+			errorDialog(e.message);
+		}
+		return false;
+	}
+
+	async function handleFetchTextResponse(response) {
+		const responseMessage = await response.text();
+		if(response.status==200) {
+			successDialog(responseMessage);
+			return true;
+		} else {
+			errorDialog(responseMessage);
+			console.log(responseMessage);
+		}
+		return false;
+	}
+
+	async function deleteIds(uri, deletedIds) {
+		if(deletedIds.length<=0) {
+			return true;
+		}
+		const params = new URLSearchParams(deletedIds.map(id=>['id',id]));
+		const searchString = params.toString();
+		try {
+			const response = await fetch(uri+params.toString(), {
+				method: 'DELETE'
+			});
+			return await handleFetchTextResponse(response);
+		} catch(e) {
+			errorDialog(e.message);
+		}
+		return false;
+	}
+
+	function getModifiedData(js, entity, data) {
+		if(! entity.idField) return data;
+		const idIndex = getIdFieldIndex(entity);
+		if(idIndex<0) return data;
+		let modifiedData = []
+		modifiedData.push(data[0]);
+		for(let i=1; i<data.length;i++) {
+			const row = data[i];
+			if(isRowModified(js, entity, row, i)) {
+				modifiedData.push(row);
+			}
+		}
+		return modifiedData;
+	}
+
+	function getDeletedIds(entity, data) {
+		if(! entity.idField) return [];
+		const idIndex = getIdFieldIndex(entity);
+		if(idIndex<0) return [];
+		const ids = Object.keys(originalValiueHashes[entity.name]);
+		const currIds = data.map(r => r[idIndex]);
+		const deletedIds = ids.filter( x => !currIds.includes(x) );
+		return deletedIds;
+	}
+
+	async function save(entities) {
+		const js = getCurrentJexcel();
+		if(!js) return;
+		const data = getCurrentData(js);
+		//console.log(data);
+		if(data.length===0) return;
+		console.log("Save data...: "+currentEntity.name);
+		const entity = currentEntity;
+		const saveUri = remoteUrl(remoteBaseUri + entity.putUri, false, false);
+		const deleteUri = remoteBaseUri + entity.deleteUri;
+		console.log("URI: "+saveUri);
+		let success = false;
+		if(entity.idField) {
+			const modifiedData = getModifiedData(js, entity, data);
+			const deletedIds = getDeletedIds(entity, data);
+			resetMessage();
+			success = await deleteIds(deleteUri, deletedIds)
+				&& await saveData(saveUri, modifiedData, false);
+		} else {
+			success = await saveData(saveUri, data, true);
+		}
+		if(success) {
+			refreshData();
+			cacheOriginalValueHashes(js, entity);
+		}
+	}
+
+	function syncIconStates(js, selector, iconIndex) {
+		const filterRow = js.el.querySelector(selector);
+		if(filterRow) {
+			const filterState = !(filterRow.style.display === 'none');
+			const toolBarItems = toolBar.querySelectorAll(".jtoolbar-item");
+			console.log("filterState - "+ selector +":"+filterState);
+			if(toolBarItems && toolBarItems.length>iconIndex) {
+				if(filterState) toolBarItems[iconIndex].classList.add("jtoolbar-active");
+				else toolBarItems[iconIndex].classList.remove("jtoolbar-active");
+			}
+		}
+	}
+
+	function syncAllIconStates(js) {
+		syncIconStates(js, '.jexcel > thead > tr:nth-child(2)', columnFilterTool);
+		syncIconStates(js, '.jexcel_filter', tableSearchTool);
+	}
+
+	function initFilterState(js, selector) {
+		const filterRow = js.el.querySelector(selector);
+		if(filterRow) filterRow.style.display = 'none';
+	}
+
+	function initAllFilterStates(js) {
+		initFilterState(js, '.jexcel > thead tr:nth-child(2)');
+		initFilterState(js, '.jexcel_filter');
+	}
+
+	function importFile() {
+		let input = document.createElement('input');
+		input.type = 'file';
+		input.onchange = _this => {
+			let files = Array.from(input.files);
+			console.log(files);
+			uploadFile(input.files[0]);
+		};
+		input.click();
+	}
+
+	function toggleFunc(icon, selector) {
+		const js = getCurrentJexcel();
+		if(!js) return true;
+		icon.classList.toggle("jtoolbar-active");
+		const filterRow = js.el.querySelector(selector);
+		if(filterRow) {
+			const active = filterRow.style.display !== 'none';
+			if(active) filterRow.style.display = "none";
+			else filterRow.style.display=null;
+		}
+	}
+
+	function createToolbar(entities) {
+		jSuites.toolbar(toolBar, {
+			container: true,
+			items:[
+				{
+					type: 'select',
+					data: Object.keys(entities),
+					render: function(e) { return '<span>' + entities[e].name + '</span>'; },
+					width: maxStringWidth(entityNames(entities))+2*mWidth,
+					onchange: function(a,b,c,d) { switchToEntity(entities[d]); }
+				},
+				{
+					type: 'icon',
+					content: 'save',
+					onclick: function() { save(entities); }
+				},
+				{
+					type: 'select',
+					data: ["TSV", "CSV"],
+					onchange: function(a,b,c,value) { downloadFormat = value; }
+				},
+				{
+					type: 'icon',
+					content: 'vertical_align_bottom',
+					onclick: download
+				},
+				{
+					type: 'icon',
+					content: 'vertical_align_top',
+					onclick: importFile,
+					// render: function(e) {
+					// 	return '<button onclick="download();"><i class="material-icons">vertical_align_top</i></button>';
+					// }
+
+				},
+				{
+					type: 'icon',
+					content: 'filter_list',
+					onclick: function(a,b,c) {
+						return toggleFunc(c,'.jexcel > thead > tr:nth-child(2)');
+					},
+					state: true,
+					active: false,
+				},
+				{
+					type: 'icon',
+					content: 'search',
+					onclick: function(a,b,c) {
+						resizeBars();
+						const result = toggleFunc(c, '.jexcel_filter');
+						adjustMaxContentHeight(null, c.classList.contains("jtoolbar-active"));
+					},
+					state: true,
+					active: false,
+				},
+				{
+					type: 'icon',
+					content: 'refresh',
+					onclick: refreshData
+				}
+			]
+		});
+	}
+
+	async function loadConfiguration() {
+		const configUrl = location.port==8000? remoteBaseUri+'config.json' : remoteBaseUri+'/configuration'
+		const response = await fetch(configUrl);
+		const configuration = await response.json();
+		console.log(configuration);
+		const entities = configuration.entities;
+		console.log(Object.keys(entities));
+		createToolbar(entities);
+	}
+
+	//********* Always return true from window.confirm 
+	const overrideConfirmBox=()=>{
+		let alwaysConfirmScript=document.createElement("script");
+		alwaysConfirmScript.innerHTML=`window.confirm=(...args)=>{ return true; }`;
+		document.body.appendChild(alwaysConfirmScript);
+	}
+	overrideConfirmBox();
+	//*********
+
+    keytListener = function(e) {
+		const js = getCurrentJexcel();
+		if(js) {
+			if ((e.key == 'i' && e.ctrlKey) || e.which == 13 || e.which == 9) {
+				if(!js.selectedCell) {
+					if(e.which == 13) return;
+					const cell = js.getCell("A2");
+					cell.focus();
+					js.updateSelectionFromCoords(1, 0, 1, 0);
+				}
+
+				const currentX = js.selectedCell[0];
+				const currentY = js.selectedCell[1];
+				const XMax = js.options.data[currentY].length - 1;
+				const YMax = js.options.data.length - 1;
+
+				if (e.key == 'i' && currentY == YMax) {
+					console.log("Inserted row")
+					js.insertRow();
+					pageUpDown(js, false);
+					e.preventDefault();
+				}
+
+				if (currentX == XMax && !(currentY == YMax && e.which == 9 && !e.ctrlKey)) {
+					const newX=e.which == 9?0:1;
+					const newY=e.which == 9?currentY+1:currentY;
+					console.log("Moved selection: "+(currentY+1))
+					js.updateSelectionFromCoords(newX, currentY+1, newX, currentY+1);
+					e.preventDefault();	
+				}
+			} else if (e.key == 'd' && e.ctrlKey) {
+				const currentX = js.selectedCell[0];
+				const currentY = js.selectedCell[1];
+				js.deleteRow(currentY, 1);
+				js.updateSelectionFromCoords(currentX, currentY, currentX, currentY);
+				e.preventDefault();	
+			} else if(e.key == 'PageDown' || e.key == 'PageUp') {
+				pageUpDown(js, e.key == 'PageUp');
+			}
+			
+			console.log(e.wich +" - "+e.key);
+			return false;
+		}
+	}
+	document.addEventListener("keydown", keytListener);
+
+	loadConfiguration();
+	</script>
+</body>
+</html>
