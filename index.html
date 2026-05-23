@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Collection</title>
+    <title>Pet Web Apps</title>
     <style>
         :root {
             color-scheme: dark;
@@ -36,7 +36,7 @@
         }
 
         .page {
-            width: min(1100px, 100% - 2rem);
+            width: min(1360px, 100% - 1rem);
             height: 100vh;
             margin: 0 auto;
             padding: 1rem 0 1.25rem;
@@ -68,11 +68,13 @@
 
         .grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(192px, 1fr));
+            grid-auto-rows: 1fr;
             gap: 0.95rem;
             overflow: auto;
             padding: 0.1rem 0.1rem 0.4rem;
             align-content: start;
+            justify-content: center;
         }
 
         .card {
@@ -83,9 +85,10 @@
             box-shadow: var(--shadow);
             transition: transform 160ms ease, border-color 160ms ease;
             cursor: pointer;
-            display: grid;
-            grid-template-rows: minmax(0, 1fr) auto;
-            height: 210px;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            min-height: 0;
         }
 
         .card:hover,
@@ -103,7 +106,9 @@
         .card-media {
             display: block;
             width: 100%;
-            height: 100%;
+            height: auto;
+            flex: 1 1 auto;
+            min-height: 0;
             object-fit: cover;
             border-bottom: 1px solid var(--line);
             background: #090f16;
@@ -258,7 +263,7 @@
 
         @media (max-width: 700px) {
             .page {
-                width: min(1100px, 100% - 1rem);
+                width: min(1360px, 100% - 0.5rem);
                 padding-top: 0.75rem;
             }
 
@@ -274,7 +279,7 @@
 <body>
     <div class="page">
         <header class="page-header">
-            <h1>Pet Web Projects</h1>
+            <h1>Pet Web Apps</h1>
         </header>
         <main id="linksGrid" class="grid" aria-live="polite"></main>
     </div>
@@ -683,6 +688,68 @@
             }
         }
 
+        function applyResponsiveGridLayout(itemCount) {
+            if (!itemCount || itemCount < 1) {
+                return;
+            }
+
+            const minTileWidth = 192;
+            const tileHeightRatio = 13 / 16;
+            const computed = window.getComputedStyle(linksGrid);
+            const columnGap = Number.parseFloat(computed.columnGap || computed.gap || "0") || 0;
+            const rowGap = Number.parseFloat(computed.rowGap || computed.gap || "0") || 0;
+            const paddingX = (Number.parseFloat(computed.paddingLeft) || 0) + (Number.parseFloat(computed.paddingRight) || 0);
+            const paddingY = (Number.parseFloat(computed.paddingTop) || 0) + (Number.parseFloat(computed.paddingBottom) || 0);
+            const availableWidth = Math.max(0, linksGrid.clientWidth - paddingX);
+            const availableHeight = Math.max(0, linksGrid.clientHeight - paddingY);
+
+            if (availableWidth <= 0 || availableHeight <= 0) {
+                return;
+            }
+
+            let bestLayout = null;
+
+            for (let cols = 1; cols <= itemCount; cols += 1) {
+                const rows = Math.ceil(itemCount / cols);
+                const maxTileWidthByWidth = (availableWidth - (columnGap * (cols - 1))) / cols;
+                const maxTileHeightByHeight = (availableHeight - (rowGap * (rows - 1))) / rows;
+                const maxTileWidthByHeight = maxTileHeightByHeight / tileHeightRatio;
+                const tileWidth = Math.min(maxTileWidthByWidth, maxTileWidthByHeight);
+
+                if (tileWidth < minTileWidth || !Number.isFinite(tileWidth)) {
+                    continue;
+                }
+
+                if (!bestLayout || tileWidth > bestLayout.tileWidth) {
+                    bestLayout = { cols, tileWidth };
+                }
+            }
+
+            if (!bestLayout) {
+                const maxColsAtMinWidth = Math.max(1, Math.floor((availableWidth + columnGap) / (minTileWidth + columnGap)));
+                const cols = Math.min(itemCount, maxColsAtMinWidth);
+                const tileWidth = (availableWidth - (columnGap * (cols - 1))) / cols;
+                bestLayout = { cols, tileWidth: Math.max(minTileWidth, tileWidth) };
+            }
+
+            const tileHeight = bestLayout.tileWidth * tileHeightRatio;
+            linksGrid.style.gridTemplateColumns = `repeat(${bestLayout.cols}, minmax(0, 1fr))`;
+            linksGrid.style.gridAutoRows = `${tileHeight}px`;
+        }
+
+        let responsiveLayoutRaf = 0;
+
+        function scheduleResponsiveGridLayout(itemCount) {
+            if (responsiveLayoutRaf) {
+                window.cancelAnimationFrame(responsiveLayoutRaf);
+            }
+
+            responsiveLayoutRaf = window.requestAnimationFrame(() => {
+                responsiveLayoutRaf = 0;
+                applyResponsiveGridLayout(itemCount);
+            });
+        }
+
         function renderCards() {
             if (!Array.isArray(links) || links.length === 0) {
                 linksGrid.innerHTML = '<p class="empty">No links found. Edit list.js to add entries.</p>';
@@ -738,6 +805,7 @@
             });
 
             linksGrid.replaceChildren(fragment);
+            scheduleResponsiveGridLayout(links.length);
         }
 
         closeOverlayButton.addEventListener("click", closeOverlay);
@@ -778,6 +846,8 @@
                 const rect = overlayControls.getBoundingClientRect();
                 positionOverlayControls(rect.left, rect.top);
             }
+
+            scheduleResponsiveGridLayout(links.length);
         });
 
         closeOverlay();
