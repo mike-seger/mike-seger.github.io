@@ -4,7 +4,7 @@ export const links = [
     { title: "Saron Calculator", url: "saron-compound-public/src/main/resources/static/" },
     { title: "GFX Experiments", url: "gfx-experiments/" },
     { title: "Embedded UIs", url: "embedded-ui-tests/iottimer/" },
-    { title: "7 segment screen clock (web)", url: "7-segment-screen-clock-web/" },
+    { title: "7 segment screen clock (web)", url: "7-segment-screen-clock-web/", live: true },
     { title: "Wordled", url: "wordled/" },
     { title: "Polaris Player 2", url: "polaris-player-2/public/" },
     { title: "SARON Compound Rate Calculator (WebGPU)", url: "webgpu-compute-compound-rates/" },

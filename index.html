@@ -104,15 +104,54 @@
             transform: translateY(-2px);
         }
 
-        .card-media {
-            display: block;
+        .card-media-shell {
+            position: relative;
             width: 100%;
+            aspect-ratio: 16 / 9;
             height: auto;
-            flex: 1 1 auto;
+            flex: 0 0 auto;
             min-height: 0;
-            object-fit: cover;
             border-bottom: 1px solid var(--line);
             background: #090f16;
+            overflow: hidden;
+        }
+
+        .card-media {
+            position: absolute;
+            inset: 0;
+            display: block;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            background: #090f16;
+            transition: opacity 120ms ease;
+        }
+
+        .card-live-media {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            border: 0;
+            background: #090f16;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 120ms ease;
+        }
+
+        .card-live-shield {
+            position: absolute;
+            inset: 0;
+            background: transparent;
+            z-index: 2;
+        }
+
+        .card-media-shell.live-ready .card-media {
+            opacity: 0;
+        }
+
+        .card-media-shell.live-ready .card-live-media {
+            opacity: 1;
         }
 
         .card-footer {
@@ -295,7 +334,7 @@
             <div class="overlay-actions">
                 <button id="openInTab" class="overlay-action" type="button">Open in a tab</button>
                 <button id="openGithub" class="overlay-action" type="button">Open github</button>
-                <button id="closeOverlay" class="overlay-close" type="button" aria-label="Close overlay">Close</button>
+                <button id="closeOverlay" class="overlay-close" type="button" aria-label="Back to overview">Back</button>
             </div>
         </section>
     </div>
@@ -338,6 +377,15 @@
         let selectedGithubUrl = "";
         let selectedCard = null;
         let dragState = null;
+        let overlayHistoryActive = false;
+
+        function syncOverlayHistoryState(state) {
+            try {
+                window.history.replaceState(state, "", window.location.href);
+            } catch {
+                // Ignore history write failures.
+            }
+        }
 
         function normalizeRelativeUrl(url) {
             return url.replace(/^\/+/, "");
@@ -573,6 +621,28 @@
             });
         }
 
+        function hydrateLivePreview(item, mediaShell, iframeElement, fallbackImageElement) {
+            hydratePreview(item, fallbackImageElement);
+
+            const revealTimeout = window.setTimeout(() => {
+                mediaShell.classList.remove("live-ready");
+            }, 8000);
+
+            iframeElement.addEventListener("load", () => {
+                window.clearTimeout(revealTimeout);
+                mediaShell.classList.add("live-ready");
+            }, { once: true });
+
+            resolveLinkPath(item.url)
+                .then((targetUrl) => {
+                    iframeElement.src = targetUrl;
+                })
+                .catch(() => {
+                    window.clearTimeout(revealTimeout);
+                    mediaShell.classList.remove("live-ready");
+                });
+        }
+
         async function ensurePreviewCaptured(item, imageElement) {
             const targetUrl = await resolveLinkPath(item.url);
             const metadata = await getPageMetadata(targetUrl);
@@ -598,14 +668,23 @@
             }
         }
 
-        function closeOverlay() {
+        function closeOverlay({ fromHistory = false } = {}) {
+            overlayHistoryActive = false;
             overlay.classList.remove("open");
             overlay.setAttribute("aria-hidden", "true");
             overlayFrame.src = "about:blank";
             selectedPath = "";
             selectedGithubUrl = "";
+            if (selectedCard) {
+                selectedCard.classList.remove("selected");
+                selectedCard = null;
+            }
             openInTabButton.disabled = true;
             openGithubButton.disabled = true;
+
+            if (!fromHistory) {
+                syncOverlayHistoryState({ overlayOpen: false });
+            }
         }
 
         async function openOverlay(item, imageElement, cardElement) {
@@ -621,6 +700,10 @@
             const path = await resolveLinkPath(item.url);
             const githubUrl = resolveGithubUrl(item);
             overlayTitle.textContent = item.title;
+            if (!overlayHistoryActive) {
+                window.history.pushState({ overlayOpen: true }, "", window.location.href);
+                overlayHistoryActive = true;
+            }
             overlayFrame.src = path;
             overlay.classList.add("open");
             overlay.setAttribute("aria-hidden", "false");
@@ -695,7 +778,7 @@
             }
 
             const minTileWidth = 192;
-            const tileHeightRatio = 13 / 16;
+            const mediaAspectRatio = 9 / 16;
             const computed = window.getComputedStyle(linksGrid);
             const columnGap = Number.parseFloat(computed.columnGap || computed.gap || "0") || 0;
             const rowGap = Number.parseFloat(computed.rowGap || computed.gap || "0") || 0;
@@ -703,6 +786,8 @@
             const paddingY = (Number.parseFloat(computed.paddingTop) || 0) + (Number.parseFloat(computed.paddingBottom) || 0);
             const availableWidth = Math.max(0, linksGrid.clientWidth - paddingX);
             const availableHeight = Math.max(0, linksGrid.clientHeight - paddingY);
+            const sampleFooter = linksGrid.querySelector(".card-footer");
+            const footerHeight = sampleFooter ? sampleFooter.getBoundingClientRect().height : 54;
 
             if (availableWidth <= 0 || availableHeight <= 0) {
                 return;
@@ -712,12 +797,11 @@
 
             for (let cols = 1; cols <= itemCount; cols += 1) {
                 const rows = Math.ceil(itemCount / cols);
-                const maxTileWidthByWidth = (availableWidth - (columnGap * (cols - 1))) / cols;
-                const maxTileHeightByHeight = (availableHeight - (rowGap * (rows - 1))) / rows;
-                const maxTileWidthByHeight = maxTileHeightByHeight / tileHeightRatio;
-                const tileWidth = Math.min(maxTileWidthByWidth, maxTileWidthByHeight);
+                const tileWidth = (availableWidth - (columnGap * (cols - 1))) / cols;
+                const tileHeight = (tileWidth * mediaAspectRatio) + footerHeight;
+                const totalHeight = (rows * tileHeight) + (rowGap * (rows - 1));
 
-                if (tileWidth < minTileWidth || !Number.isFinite(tileWidth)) {
+                if (tileWidth < minTileWidth || !Number.isFinite(tileWidth) || totalHeight > availableHeight) {
                     continue;
                 }
 
@@ -733,7 +817,7 @@
                 bestLayout = { cols, tileWidth: Math.max(minTileWidth, tileWidth) };
             }
 
-            const tileHeight = bestLayout.tileWidth * tileHeightRatio;
+            const tileHeight = (bestLayout.tileWidth * mediaAspectRatio) + footerHeight;
             linksGrid.style.gridTemplateColumns = `repeat(${bestLayout.cols}, minmax(0, 1fr))`;
             linksGrid.style.gridAutoRows = `${tileHeight}px`;
         }
@@ -764,11 +848,33 @@
                 card.className = "card";
                 card.tabIndex = 0;
 
+                const mediaShell = document.createElement("div");
+                mediaShell.className = "card-media-shell";
+
                 const image = document.createElement("img");
                 image.className = "card-media";
                 image.src = defaultPreviewDataUrl;
                 image.alt = `${item.title} preview`;
                 image.loading = "lazy";
+                mediaShell.appendChild(image);
+
+                if (item.live) {
+                    const liveFrame = document.createElement("iframe");
+                    liveFrame.className = "card-live-media";
+                    liveFrame.title = `${item.title} live preview`;
+                    liveFrame.loading = "lazy";
+                    liveFrame.tabIndex = -1;
+                    liveFrame.setAttribute("aria-hidden", "true");
+
+                    const liveShield = document.createElement("div");
+                    liveShield.className = "card-live-shield";
+                    liveShield.setAttribute("aria-hidden", "true");
+
+                    mediaShell.append(liveFrame, liveShield);
+                    hydrateLivePreview(item, mediaShell, liveFrame, image);
+                } else {
+                    hydratePreview(item, image);
+                }
 
                 const footer = document.createElement("footer");
                 footer.className = "card-footer";
@@ -790,7 +896,7 @@
 
                 footerTitleRow.append(favicon, footerTitle);
                 footer.append(footerTitleRow);
-                card.append(image, footer);
+                card.append(mediaShell, footer);
 
                 card.addEventListener("click", () => openOverlay(item, image, card));
                 card.addEventListener("keydown", (event) => {
@@ -801,7 +907,6 @@
                 });
 
                 fragment.appendChild(card);
-                hydratePreview(item, image);
                 hydrateFavicon(item, favicon);
             });
 
@@ -810,6 +915,35 @@
         }
 
         closeOverlayButton.addEventListener("click", closeOverlay);
+
+        window.addEventListener("popstate", () => {
+            if (overlay.classList.contains("open")) {
+                closeOverlay({ fromHistory: true });
+            } else {
+                overlayHistoryActive = false;
+            }
+        });
+
+        overlayFrame.addEventListener("load", () => {
+            try {
+                const frameWindow = overlayFrame.contentWindow;
+                if (!frameWindow) {
+                    return;
+                }
+
+                if (!frameWindow.history.state?.overlayPreviewRoot) {
+                    frameWindow.history.pushState({ overlayPreviewRoot: true }, "", frameWindow.location.href);
+                }
+
+                frameWindow.onpopstate = () => {
+                    if (overlay.classList.contains("open")) {
+                        closeOverlay({ fromHistory: true });
+                    }
+                };
+            } catch {
+                // Ignore cross-origin preview restrictions.
+            }
+        });
 
         openInTabButton.addEventListener("click", () => {
             if (selectedPath) {
