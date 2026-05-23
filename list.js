@@ -2,7 +2,7 @@ export const links = [
     { title: "Build Bench Reports", url: "bb-reports/" },
     { title: "Grid Experiments", url: "grid-experiments/" },
     { title: "Saron Calculator", url: "saron-compound-public/src/main/resources/static/" },
-    { title: "GFX Experiments", url: "gfx-experiments/" },
+    { title: "GFX Experiments", url: "gfx-experiments/?select=plasmas/frank-adl/index-voronoi-sphere.html" },
     { title: "Embedded UIs", url: "embedded-ui-tests/iottimer/" },
     { title: "7 segment screen clock (web)", url: "7-segment-screen-clock-web/", live: true },
     { title: "Wordled", url: "wordled/" },
